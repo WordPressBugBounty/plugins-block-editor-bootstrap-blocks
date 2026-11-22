@@ -2,10 +2,10 @@
 Contributors:		kubiq
 Donate link:		https://www.paypal.me/jakubnovaksl
 Tags:				responsive, grid, layout, columns, breakpoints
-Tested up to:		6.9
-Requires at least:	5.6
+Tested up to:		7.1
+Requires at least:	6.3
 Requires PHP:		7.4
-Stable tag:			6.9.2
+Stable tag:			6.9.3
 License:			GPLv2 or later
 License URI:		http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -92,7 +92,6 @@ You can use Bootstrap row and columns blocks with detailed settings for each bre
 	<li>Component for Alignment, so you can align your text to the left for PC but to the center for mobile</li>
 	<li>Component for autocomplete Bootstrap classes</li>
 	<li>Extended formats - uppercase, capitalize, lowercase, stretched-link, mark, non-breaking space (nbsp) and soft-hypen (shy) inserter</li>
-	<li>Extended shortcuts - shift+alt+[1..7] to switch between paragraph and headings levels - same as in classic editor (tinymce wysiwyg)</li>
 </ul>
 
 
@@ -103,6 +102,30 @@ You can use Bootstrap row and columns blocks with detailed settings for each bre
 
 
 == Changelog ==
+
+= 6.9.3 =
+* tested on WP 7.1
+* requires WordPress 6.3+
+* container, row and column blocks are position static in the editor (as on the frontend), so absolutely positioned inner blocks are placed correctly; selection outline matches core look and quick-select tags use CSS anchor positioning
+* fix duplicated accordion item IDs after copying or moving accordion items in the editor
+* block IDs (tempID, accordion and tabs anchors) are no longer regenerated on every editor load - post is not marked as changed just by opening it and anchor links keep working; new ID is generated only for new or copied blocks
+* fix copied tabs block sharing the same IDs with the original
+* frontend CSS values are validated instead of HTML escaped - fixes quotes (eg. grid-template-areas) and > in bootstrap_css_parent_selector, trailing !important is supported
+* security: template loader doesn't print server file path when template file is missing
+* fix missing exit after redirect to settings page on plugin activation
+* row layouts filter (bootstrap.row.layouts, old misspelled bootrap.row.layouts still works) supports whole copied row block markup as a layout
+* new JS filters bootstrap.row.autocenterSingleColumn and bootstrap.container.autoselectParagraph
+* removed shorthash dependency (generated IDs stay the same)
+* removed paragraph / headings keyboard shortcuts (shift+alt+[1..7]) - they are part of WordPress core since 7.1
+* removed own Ctrl/Cmd+Shift+Space shortcut for non-breaking space - WordPress core provides it (nbsp toolbar button stays)
+* "Highlight" format renamed to "Mark" so it is not confused with core Highlight (text color) format
+* removed fallbacks for __experimentalUseInnerBlocksProps (not needed for WordPress 6.3+)
+* editor performance: snapping measures the layout only for snapped group / cover blocks
+* editor performance: settings panels are rendered only for the selected block, and bootstrap extensions re-render (and rebuild editor CSS) only when their own attributes change
+* bootstrap extensions are not added to synced patterns (core/block), shortcodes and missing blocks - new JS filter bootstrap.extensions.excludedBlocks
+* arrow up / down keys change values like in spacing (Shift 10, Ctrl 100, Alt 0.1) also in Position (Z-index, Top, Right, Bottom, Left), Size (width, min-width, max-width, height, min-height, max-height), Flex container Gap, Flex item Flex basis and Grid item Order
+* fix Row block in the editor: Flex container (gap, direction, wrap, justify / align), Grid container and Display (eg. grid, flex) settings are applied to the inner .row element like on the frontend, not to the editor block wrapper - new JS filter bootstrap.editor.layoutChildSelector
+* fix bootstrap classes (spacing, display, flex, grid, position, size, snapping, bootstrap classes) not applied on the frontend for dynamic blocks rendered by PHP, eg. Site Logo, Site Title, Navigation - new PHP filter bootstrap_block_classes
 
 = 6.9.2 =
 * now you can specify anchor ID for every bootstrap tab and then use it in URL hash eg. with JS: bootstrap.Tab.getOrCreateInstance('#your-id').show()

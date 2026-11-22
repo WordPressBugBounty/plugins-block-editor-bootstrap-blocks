@@ -3,9 +3,9 @@
 	Plugin Name:		Block Editor Bootstrap Blocks
 	Plugin URI:			https://wp-speedup.eu/shop/wordpress-plugins/pro-plugins/block-editor-bootstrap-blocks-pro/
 	Description:		Fully responsive Bootstrap 5 blocks, components and extends for Gutenberg
-	Requires at least:	5.6
+	Requires at least:	6.3
 	Requires PHP:		7.4
-	Version:			6.9.2
+	Version:			6.9.3
 	Author:				KubiQ
 	Author URI:			https://kubiq.sk
 	License:			GPL-2.0-or-later
@@ -186,6 +186,129 @@ class BootstrapBlocks{
 		echo '<script>document.addEventListener("readystatechange",function(){var e,t;"interactive"==document.readyState&&((e=document.createElement("div")).className="container",(t=document.createElement("div")).className="bs-offset-helper",e.appendChild(t),document.body.appendChild(e),setTimeout(function(){document.documentElement.style.setProperty("--bs-offset",document.querySelector(".bs-offset-helper").getBoundingClientRect().left+"px")},1))},!0);var bsOffsetTimer="";window.addEventListener("resize",function(){clearTimeout(bsOffsetTimer),bsOffsetTimer=setTimeout(function(){document.documentElement.style.setProperty("--bs-offset",document.querySelector(".bs-offset-helper").getBoundingClientRect().left+"px")},100)},!0);</script>';
 	}
 
+	/**
+	 * Returns true when the attribute value (or any nested value) is set, eg. [ 'md' => '10px' ]
+	 */
+	static function has_attribute_value( $value ){
+		if( is_array( $value ) || is_object( $value ) ){
+			foreach( (array) $value as $key => $item ){
+				// spacing "important" flag alone does not mean any spacing
+				if( $key === 'important' ){
+					continue;
+				}
+				if( self::has_attribute_value( $item ) ){
+					return true;
+				}
+			}
+			return false;
+		}
+		return $value !== null && $value !== '' && $value !== false;
+	}
+
+	/**
+	 * Bootstrap classes of the block - same classes as the editor adds to saved HTML of static blocks
+	 * (blocks.getSaveContent.extraProps filters of the extensions).
+	 *
+	 * @param array $attrs block attributes
+	 * @return string[] class names
+	 */
+	static function get_block_classes( $attrs ){
+		$class_names = [];
+
+		// per block CSS (spacing, flex gap / basis, grid, position, size) is generated for .bs-{tempID}
+		if( ! empty( $attrs['tempID'] ) ){
+			foreach( [ 'bsSpacing', 'bsFlexGap', 'bsFlexBasis', 'bsGridTemplateRows', 'bsGridTemplateColumns', 'bsGridTemplateAreas', 'bsGridAutoRows', 'bsGridAutoColumns', 'bsGridAutoFlow', 'bsGridJustifyItems', 'bsGridAlignItems', 'bsGridJustifyContent', 'bsGridAlignContent', 'bsGridGap', 'bsGridColumn', 'bsGridRow', 'bsGridJustifySelf', 'bsGridAlignSelf', 'bsGridOrder', 'bsPosition', 'bsPositionZindex', 'bsPositionTop', 'bsPositionRight', 'bsPositionBottom', 'bsPositionLeft', 'bsPositionTransform', 'bsPositionTransformOrigin', 'bsWidth', 'bsMinWidth', 'bsMaxWidth', 'bsHeight', 'bsMinHeight', 'bsMaxHeight', 'bsAspectRatio' ] as $css_attribute ){
+				if( isset( $attrs[ $css_attribute ] ) && self::has_attribute_value( $attrs[ $css_attribute ] ) ){
+					$class_names[] = 'bs-' . $attrs['tempID'];
+					break;
+				}
+			}
+		}
+
+		$responsive_classes = [
+			'bsAlignment' => 'text-{breakpoint}{value}',
+			'bsDisplay' => 'd-{breakpoint}{value}',
+			'bsFlexDirection' => 'flex-{breakpoint}{value}',
+			'bsFlexWrap' => 'flex-{breakpoint}{value}',
+			'bsFlexJustifyContent' => 'justify-content-{breakpoint}{value}',
+			'bsFlexAlignItems' => 'align-items-{breakpoint}{value}',
+			'bsFlexAlignContent' => 'align-content-{breakpoint}{value}',
+			'bsFlexGrow' => 'flex-{breakpoint}grow-{value}',
+			'bsFlexShrink' => 'flex-{breakpoint}shrink-{value}',
+			'bsFlexAlignSelf' => 'align-self-{breakpoint}{value}',
+			'bsFlexOrder' => 'order-{breakpoint}{value}',
+			'bsSnapping' => 'bs-snap-{breakpoint}{value}',
+		];
+
+		foreach( $responsive_classes as $attribute => $class_template ){
+			if( empty( $attrs[ $attribute ] ) || ! is_array( $attrs[ $attribute ] ) ){
+				continue;
+			}
+			foreach( $attrs[ $attribute ] as $breakpoint => $value ){
+				if( is_scalar( $value ) && $value !== '' && $value !== false ){
+					$class_names[] = str_replace( [ '{breakpoint}', '{value}' ], [ $breakpoint ? $breakpoint . '-' : '', $value ], $class_template );
+					// "snap without inner content" is enabled by default (attribute is not saved then)
+					if( $attribute === 'bsSnapping' && ( ! isset( $attrs['bsSnappingWithoutInner'] ) || $attrs['bsSnappingWithoutInner'] ) ){
+						$class_names[] = 'bs-snap-wo-inner';
+					}
+				}
+			}
+		}
+
+		if( ! empty( $attrs['bsDisplayPrint'] ) && is_scalar( $attrs['bsDisplayPrint'] ) ){
+			$class_names[] = 'd-print-' . $attrs['bsDisplayPrint'];
+		}
+
+		if( ! empty( $attrs['bsClasses'] ) && is_string( $attrs['bsClasses'] ) ){
+			$class_names = array_merge( $class_names, preg_split( '/\s+/', trim( $attrs['bsClasses'] ) ) );
+		}
+
+		$class_names = array_map( 'sanitize_html_class', $class_names );
+
+		return array_values( array_unique( array_filter( $class_names ) ) );
+	}
+
+	/**
+	 * Static blocks get bootstrap classes in their saved HTML from the editor, but dynamic blocks
+	 * (rendered by PHP, eg. Site Logo, Site Title, Navigation) don't have it, so add them to the first HTML element.
+	 */
+	function maybe_add_dynamic_block_classes( $block_content, $block ){
+		if( ! is_string( $block_content ) || trim( $block_content ) === '' || empty( $block['attrs'] ) || empty( $block['blockName'] ) || ! class_exists( 'WP_HTML_Tag_Processor' ) ){
+			return $block_content;
+		}
+
+		// same as excluded blocks in the editor (src/utils/extendable-blocks.js)
+		if( in_array( $block['blockName'], [ 'core/block', 'core/shortcode', 'core/missing' ], true ) ){
+			return $block_content;
+		}
+
+		$block_type = WP_Block_Type_Registry::get_instance()->get_registered( $block['blockName'] );
+		if( ! $block_type || ! $block_type->is_dynamic() ){
+			return $block_content;
+		}
+
+		$class_names = (array) apply_filters( 'bootstrap_block_classes', self::get_block_classes( $block['attrs'] ), $block );
+		$class_names = array_values( array_unique( array_filter( array_map( 'sanitize_html_class', $class_names ) ) ) );
+		if( ! $class_names ){
+			return $block_content;
+		}
+
+		$processor = new WP_HTML_Tag_Processor( $block_content );
+		while( $processor->next_tag() ){
+			// skip assets printed before the block wrapper
+			if( in_array( $processor->get_tag(), [ 'STYLE', 'SCRIPT', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE' ], true ) ){
+				continue;
+			}
+			// blocks with both saved HTML and render callback (eg. Image) already have the classes
+			foreach( $class_names as $class_name ){
+				$processor->add_class( $class_name );
+			}
+			return $processor->get_updated_html();
+		}
+
+		return $block_content;
+	}
+
 	function render_block( $block_content, $block ){
 		global $wp_version;
 
@@ -198,6 +321,9 @@ class BootstrapBlocks{
 		if( isset( $block['attrs']['bsHideForLoggedOut'] ) && $block['attrs']['bsHideForLoggedOut'] && ! is_user_logged_in() ){
 			return '';
 		}
+
+		// add bootstrap classes to blocks rendered by PHP (eg. Site Logo), they have no saved HTML from the editor
+		$block_content = $this->maybe_add_dynamic_block_classes( $block_content, $block );
 
 		// maybe render extra CSS
 		if( isset( $block['attrs'] ) && isset( $block['attrs']['tempID'] ) && $block['attrs']['tempID'] ){
@@ -262,6 +388,55 @@ class BootstrapBlocks{
 		return $block_content;
 	}
 
+	/**
+	 * Returns CSS value only if it can't break out of its declaration, rule or <style> element, otherwise empty string.
+	 * Trailing !important typed by user is kept (! is not allowed anywhere else).
+	 *
+	 * @param mixed $value           raw value
+	 * @param bool  $convertToPixels append px to numeric values
+	 * @param bool  $addImportant    append !important (eg. spacing Important toggle)
+	 */
+	static function sanitize_css_value( $value, $convertToPixels = false, $addImportant = false ){
+		if( ! is_scalar( $value ) ){
+			return '';
+		}
+		$value = trim( (string) $value );
+
+		// take trailing !important away before validation and add it back after
+		if( preg_match( '/\s*!\s*important$/i', $value, $match ) ){
+			$addImportant = true;
+			$value = trim( substr( $value, 0, -strlen( $match[0] ) ) );
+		}
+
+		if( $value === '' ){
+			return '';
+		}
+		if( preg_match( '/[<>{};!\\\\\r\n]|\/\*|url\s*\(|expression\s*\(/i', $value ) ){
+			return '';
+		}
+		// unbalanced quotes would swallow following declarations (quotes are needed eg. for grid-template-areas)
+		if( substr_count( $value, '"' ) % 2 || substr_count( $value, "'" ) % 2 ){
+			return '';
+		}
+
+		if( $convertToPixels && is_numeric( $value ) ){
+			$value .= 'px';
+		}
+
+		return $value . ( $addImportant ? ' !important' : '' );
+	}
+
+	// allowed sides for margin-* / padding-*
+	static function sanitize_css_side( $position ){
+		$position = strtolower( (string) $position );
+		return in_array( $position, [ 'top', 'right', 'bottom', 'left' ], true ) ? $position : '';
+	}
+
+	// prints CSS into <style> without HTML escaping (which breaks quotes and > selectors), but it can't close the element
+	static function get_style_tag( $id, $css ){
+		return '<style id="' . esc_attr( $id ) . '">' . str_replace( '</', '<\/', $css ) . '</style>';
+	}
+
 	function get_extra_css(){
 		if( count( $this->final_css ) ){
 			$breakpoints = $this->config_breakpoints;
@@ -275,24 +450,14 @@ class BootstrapBlocks{
 						$tempCSS = '';
 
 						if( ! $this->has_PRO_version && isset( $block['bsSpacing'] ) ){
-							if( isset( $block['bsSpacing']['margin'][ $breakpointData['prefix'] ] ) ){
-								foreach( $block['bsSpacing']['margin'][ $breakpointData['prefix'] ] as $position => $value ){
-									if( $value !== '' ){
-										if( is_numeric( $value ) ){
-											$value .= 'px';
+							foreach( [ 'margin', 'padding' ] as $spacingType ){
+								if( isset( $block['bsSpacing'][ $spacingType ][ $breakpointData['prefix'] ] ) && is_array( $block['bsSpacing'][ $spacingType ][ $breakpointData['prefix'] ] ) ){
+									foreach( $block['bsSpacing'][ $spacingType ][ $breakpointData['prefix'] ] as $position => $value ){
+										$position = self::sanitize_css_side( $position );
+										$value = self::sanitize_css_value( $value, true, ! empty( $block['bsSpacing']['important'] ) );
+										if( $position && $value !== '' ){
+											$tempCSS .= $spacingType . '-' . $position . ':' . $value . ';';
 										}
-										$tempCSS .= 'margin-' . strtolower( $position ) . ':' . ( $value . ( $block['bsSpacing']['important'] ? ' !important' : '' ) ) . ';';
-									}
-								}
-							}
-
-							if( isset( $block['bsSpacing']['padding'][ $breakpointData['prefix'] ] ) ){
-								foreach( $block['bsSpacing']['padding'][ $breakpointData['prefix'] ] as $position => $value ){
-									if( $value !== '' ){
-										if( is_numeric( $value ) ){
-											$value .= 'px';
-										}
-										$tempCSS .= 'padding-' . strtolower( $position ) . ':' . ( $value . ( $block['bsSpacing']['important'] ? ' !important' : '' ) ) . ';';
 									}
 								}
 							}
@@ -336,11 +501,8 @@ class BootstrapBlocks{
 
 						foreach( $basicProperties as $blockOption => $item ){
 							if( isset( $block[ $blockOption ], $block[ $blockOption ][ $breakpointData['prefix'] ] ) ){
-								$value = trim( $block[ $blockOption ][ $breakpointData['prefix'] ] );
+								$value = self::sanitize_css_value( $block[ $blockOption ][ $breakpointData['prefix'] ], $item['convertToPixels'] );
 								if( $value !== '' ){
-									if( $item['convertToPixels'] && is_numeric( $value ) ){
-										$value .= 'px';
-									}
 									$tempCSS .= $item['property'] . ':' . $value . ';';
 								}
 							}
@@ -351,7 +513,7 @@ class BootstrapBlocks{
 								$breakpointsCSS[ $breakpointSize ] = '';
 							}
 							$parent_selector = apply_filters( 'bootstrap_css_parent_selector', 'body' );
-							$breakpointsCSS[ $breakpointSize ] .= esc_html( $parent_selector ) . ' .bs-' . $block['tempID'] . '{' . $tempCSS . '}';
+							$breakpointsCSS[ $breakpointSize ] .= $parent_selector . ' .bs-' . sanitize_html_class( $block['tempID'] ) . '{' . $tempCSS . '}';
 						}
 					}
 				}
@@ -369,7 +531,7 @@ class BootstrapBlocks{
 						$bsCSS .= '}';
 					}
 				}
-				return '<style id="bs-extra-css">' . esc_html( $bsCSS ) . '</style>';
+				return self::get_style_tag( 'bs-extra-css', $bsCSS );
 			}
 		}
 		return '';
@@ -703,7 +865,8 @@ class BootstrapBlocks{
 
 		if( is_admin() && get_option('BootstrapBlocksActivated') ){
 			delete_option( 'BootstrapBlocksActivated' );
-			wp_redirect( admin_url( 'options-general.php?page=' . basename( __FILE__ ) ) );
+			wp_safe_redirect( admin_url( 'options-general.php?page=' . basename( __FILE__ ) ) );
+			exit;
 		}
 		
 		$snapping_enqueued = false;

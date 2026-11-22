@@ -23,10 +23,6 @@ import './formats/capitalize';
 import './formats/lowercase';
 import './formats/stretched-link';
 
-// PLUGINS
-
-import './plugins/paragraph-headings-shortcuts';
-
 // BLOCKS
 
 import { registerBlockType } from '@wordpress/blocks';

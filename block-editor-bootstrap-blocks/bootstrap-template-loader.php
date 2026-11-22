@@ -57,8 +57,6 @@ class BootstrapTemplateLoader{
 		$file = $filepath . get_post_meta( $post->ID, '_wp_page_template', true );
 		if( file_exists( $file ) ){
 			return $file;
-		}else{
-			echo $file;
 		}
 		return $template;
 	}
